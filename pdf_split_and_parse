@@ -1,0 +1,95 @@
+import os
+import sys
+import io
+
+from PyPDF2 import PdfFileReader, PdfFileWriter
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.pdfpage import PDFPage
+from pdfminer.converter import XMLConverter, HTMLConverter, TextConverter
+from pdfminer.layout import LAParams
+
+# весь фукнционал завернут в одну функцию
+def pdf_parse_and_split():
+    
+    # лучше в винде юзать r перед директорией, она автоматически "невидимо" проставляет косые, а не делать это вручную
+    work_dir = r'C:\Users\mb81823\Desktop\RCX test' 
+
+    # получить список (list) всех файлов в указанной директории
+    file_list = os.listdir(work_dir)
+    
+    # инциализруем все объекты для процессинга пдфа
+    rsrcmgr = PDFResourceManager()
+    retstr = io.StringIO()
+    codec = 'utf-8'
+    laparams = LAParams()
+    device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+    interpreter = PDFPageInterpreter(rsrcmgr, device)
+    
+    # начинаем цикл проходки по всем файлам в директории
+    for file in file_list:
+        # берем в парсинг только файлы с расширением .pdf
+        # можно потом тут ещё какие-то условия добавить, если в директории мусор может быть
+        if file.endswith('.pdf'):
+            
+            # тут начинается наша логика обработки пдфки
+            
+            # формируем полный путь к файлу, чтобы потом правильно к нему обращаться при вызове
+            full_path_to_file = os.path.join(work_dir, file)
+            
+            # поскольку ты юзаешь две либы для процессинга, 
+            # то придеться считывать один файл одновременно 2 раза 2мя либами
+            # тут в переменную pdf и далее в цикле с with open(...)
+            # то что это костыль с кодировкой, помню) пофиг, для перфоманса этого процесса это некритично
+            pdf = PdfFileReader(full_path_to_file) # первая считка пдф
+            
+            with open(full_path_to_file, 'rb') as fp: # вторая считка пдф
+                
+                # проходка по страницам и их содержимому
+                # функция enumerate автоматом в цикле проставляет циферки-индексы,
+                # в нашем случае это будет int переменная, которая обозначает цифровой номер страницы
+                # a page это содержимое текущей страницы в цикле
+                for page_num, page in enumerate(PDFPage.get_pages(fp)):
+                    interpreter.process_page(page)
+                    data = retstr.getvalue()
+
+                    # твой дебаг
+                    #print(data)    
+                    #print('Index where begin: %i'%data.find("Customer Id"))
+
+                    # находит индекс в стринге, где начинается нужное слово
+                    get_index = data.find("Customer Id")
+                    
+                    # парсим все после этого индекса, чтобы дернуть айдишку, что тебе нужна
+                    get_customer_id = data[get_index:].split('-')[1].strip().split('\n')[0]
+
+                    # принтуем айдишку для дебага
+                    print('ID found: %s'%str(get_customer_id))
+                    
+                    # инициализируем класс для записи новой пдфки
+                    pdf_writer = PdfFileWriter()
+                    
+                    # указываем какую страницу по номеру дернуть из переменной pdf для новой пдфки
+                    pdf_writer.addPage(pdf.getPage(page_num))
+                
+                    # ниже в основном твой код, я ток более явно указал передачу перменных через .format, так более правильно
+                    # и в названия файла добавил добытую айдишку, ты уже сам её присунешь куда надо, смысл ты понял:)
+                    fname = os.path.splitext(os.path.basename(file))[0]
+                    output_filename = os.path.join(work_dir,'{new_filename}_page_{page_num}_{customer_id}.pdf'.format(
+                        new_filename=fname, 
+                        page_num=page_num+1,
+                        customer_id=get_customer_id
+                    ))
+
+                    with open(output_filename, 'wb') as out:
+                        pdf_writer.write(out)
+
+                    print('Created: {}'.format(output_filename))
+            
+    
+if __name__ == '__main__':
+    # вызываем функцию, которая парсит и нарезает все пдфки в нужной директории
+    # директория для парсинга прописана в коде выше, но можно замутить, 
+    # чтобы скрипт принимал её на вход, как аргумент, но на практике,
+    # если будут юзать другие юзеры, я бы так не рекомендовал, иначе будешь долго объяснять
+    # что такое аргумент, и как его правильно передавать в скрипт через командную строку:)
+    pdf_parse_and_split() 
