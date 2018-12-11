@@ -20,10 +20,9 @@ def pdfparser(data):
     for page in PDFPage.get_pages(fp):
         interpreter.process_page(page)
         data =  retstr.getvalue()
-        get_customer_id = data[24:].split(':')[1].strip().split(' ')[0]
-    print(get_customer_id)
-    
-
+        
+    print('Index where begin: %i'%data.find("Customer Id"))
+    get_customer_id = data[83:].split(':')[1].strip().split(' ')[0]
 
 if __name__ == '__main__':
     pdfparser(sys.argv[1]) 
