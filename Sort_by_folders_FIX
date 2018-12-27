@@ -1,0 +1,119 @@
+import os
+import sys
+import io
+import shutil
+import pandas
+import pandas as pd
+
+from PyPDF2 import PdfFileReader, PdfFileWriter
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.pdfpage import PDFPage
+from pdfminer.converter import XMLConverter, HTMLConverter, TextConverter
+from pdfminer.layout import LAParams
+
+def pdf_parse_and_split():
+    
+    # инициализация пустых переменных - сета и справочника
+    keys_set = set()
+    val_dict = {}
+
+    # подгружаем нужный csv
+    df = pd.read_csv('tt.csv', encoding='cp1251')
+    data = df.to_dict('split')['data']
+    for lst in data:
+        # достаем значения по индексам из списка
+        key = lst[0]
+        value = lst[1]
+
+        # формируем список ключей и справочник
+        keys_set.add(key)
+        val_dict[key] = value
+
+    # для дебага
+    print('Keys set:', keys_set)
+    print()
+    print('Val dict:', val_dict)
+    
+    work_dir = r'C:\Users\mb81823\Desktop\RCX test\Testfiles' 
+
+    file_list = os.listdir(work_dir)
+    
+    for file in file_list:
+
+        if file.endswith('.pdf'):
+
+            full_path_to_file = os.path.join(work_dir, file)
+            
+            pdf = PdfFileReader(full_path_to_file)
+            
+            with open(full_path_to_file, 'rb') as fp: 
+                
+                for page_num, page in enumerate(PDFPage.get_pages(fp)):
+                    rsrcmgr = PDFResourceManager()
+                    retstr = io.StringIO()
+                    codec = 'utf-8'
+                    laparams = LAParams()
+                    device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+                    interpreter = PDFPageInterpreter(rsrcmgr, device)
+                    interpreter.process_page(page)
+                    data = retstr.getvalue()
+                    #print(data.encode())
+                    # дебаг
+                    #print(data)    
+                    #print('Index where begin: %i'%data.find("Customer Id"))
+                    get_index = data.find("Customer Id")
+                    get_index1 = data.find("Transaction Id")
+                    
+                    # проверка на ключевые слова
+                    target_folder = r'C:\Users\mb81823\Desktop\RCX test\undefined_folder' # дефалтная папка для файлов без ключевых слов
+                    # цикл для перебора и поиска ключевых слов
+                    for k in keys_set:
+                        get_CCU_files = data.find(k)
+                        if get_CCU_files != -1:
+                            # переназначить целевую папку с дефалтной на нужную согласно найденому ключевому слову
+                            target_folder = val_dict[k]
+                            # и если ключевое слово нашлось - прервать цикл брейком
+                            break
+
+                    print(get_CCU_files)
+                    
+                    if get_index == -1:
+                        print('ID NOT FOUND: %s %i'%(file, page_num))
+                        continue 
+                        
+                    get_customer_id = data[get_index:].split('-')[1].strip().split('\n')[0]
+                    get_transaction_id = data[get_index1:].split('-')[1].strip().split('\n')[0]
+                    if get_transaction_id == 'Product Id:':
+                        get_transaction_id = data[:get_index1].split('\n\n')[-2].strip()
+
+                        
+                    # айдишка для дебага
+                    print('ID found: %s'%str(get_customer_id))
+                    print('ID found: %s'%str(get_transaction_id))
+                    
+                    
+                    pdf_writer = PdfFileWriter()
+                    pdf_writer.addPage(pdf.getPage(page_num))
+                    fname = os.path.splitext(os.path.basename(file))[0]
+                    output_filename = os.path.join(target_folder,'{new_filename}_{customer_id}_{transaction_id}.pdf'.format(
+                        new_filename=fname,
+                        customer_id=get_customer_id,
+                        transaction_id=get_transaction_id
+                    ))
+
+                    # если нужной директории нет - создать её
+                    if os.path.isdir(target_folder) == False:
+                        os.mkdir(target_folder)
+                        
+                    with open(output_filename, 'wb') as out:
+                        pdf_writer.write(out)
+
+
+                    #print('Created: {}'.format(output_filename))
+                    
+            # переместить файл в папку-архив после процессинга
+            shutil.move(full_path_to_file, r'C:\Users\mb81823\Desktop\RCX test\Archive')
+                    
+if __name__ == '__main__':
+
+    pdf_parse_and_split() 
