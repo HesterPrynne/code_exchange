@@ -1,0 +1,73 @@
+from pandas import read_excel
+import pandas as pd
+import win32com.client as win32
+import numpy as np
+xls = pd.ExcelFile(r'C:\Users\mb81823\Desktop\Automation\Email generation\Second approach\December apprach.xlsm')
+xls.sheet_names
+df = pd.read_excel(xls, sheet_name = 'Sharepoint')
+df1 = pd.read_excel(xls, sheet_name = 'Client database')
+df2 = pd.read_excel(xls, sheet_name = 'Template')
+df_mtls = pd.read_excel(xls, sheet_name = 'MTLS')
+mtls_list = set(df_mtls['Domain(s)'].values.tolist())
+
+template = df2.iloc[0,0]
+#print(df)
+filter = df[(df['Contract in Swift']=='no') & (df['Date of Client Letter'].isnull()) & (df['Client Informed Date'].isnull()) ]
+#df[(df['Contract in Swift']=='no') & (df['Date of Client Letter']=="") & (df['Client Informed Date']=="")]
+#print(filter)
+client = filter['Base']
+#print(client)
+#mtls = df1['MTLS type without formula']
+#if df1['MTLS type with formula'] == 'NOT MTLS':
+for client_id in client:
+    print('Client ID:%s\n'%str(client_id))
+    all_texts = df['Payment Details 1'][df['Base'] == client_id].values.tolist()
+    print('TEXTS:\n', all_texts)
+    all_emails = df1['Email 1'][df1['Client base'] == client_id].values.tolist()
+    print('EMAILS:\n', all_emails)
+
+
+    all_texts = template + '\n\n'.join(all_texts)
+    outlook = win32.Dispatch('outlook.application')
+    # VARIANT 1
+    ###################################################
+    mail = outlook.CreateItem(0)
+    mail.To = '; '.join(all_emails)
+    
+    if all_emails[0] in mtls_list:
+        #TRUE
+        mail.Subject = 'Citibank: Details for Incoming Payment' + ' ' + str(client_id)
+    else:
+        #FALSE
+        mail.Subject = '(SECURE) Citibank: Details for Incoming Payment' + ' ' + str(client_id)
+    
+    mail.Body = all_texts
+    mail.Display(False)
+    ###################################################
+    
+    # VARIANT 2
+    """
+    mtls_emails = []
+    nomtls_emails = []
+    
+    for m in all_emails:
+        if m in mtls_list:
+            mtls_emails.append(m)
+        else:
+            nomtls_emails.append(m)
+            
+    if len(mtls_emails) > 0:
+        mail = outlook.CreateItem(0)
+        mail.To = '; '.join(mtls_emails)
+        mail.Subject = 'Citibank: Details for Incoming Payment' + ' ' + str(client_id)
+        mail.Body = all_texts
+        mail.Display(False)
+    
+    if len(nomtls_emails) > 0:
+        mail = outlook.CreateItem(0)
+        mail.To = '; '.join(nomtls_emails)
+        mail.Subject = '(SECURE) Citibank: Details for Incoming Payment' + ' ' + str(client_id)
+        mail.Body = all_texts
+        mail.Display(False)"""
+
+
